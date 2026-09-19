@@ -149,6 +149,9 @@ codex --version
 
 在当前 Bash 终端定义路径：
 
+这些变量只对当前终端及其子进程生效；新开终端后需要重新执行 export。
+Python 通过 os.environ 读取的变量必须经过 export，仅写 GUARD_RUN_DIR=... 不足以传给 Python。
+
 ~~~bash
 export GUARD_ROOT="$HOME/Workspaces/Misc"
 export GUARD_CPA_DIR="$GUARD_ROOT/CLIProxyAPI"
@@ -283,27 +286,37 @@ CLIProxyAPI/dist/
         └── privacyfilter.so
 ~~~
 
-创建目录并安装插件：
+下面整段可在新开的 Bash 终端执行：恢复路径、创建目录、安装插件并生成两个独立的随机 Key。
+默认目录与第 3 节相同；已有变量会继续使用。如果之前使用了自定义目录，先恢复你的自定义路径，
+然后复制执行完整代码块，包括开头的 export 命令。
+secrets.env 已存在时会保留原有 Key。
 
 ~~~bash
+export GUARD_ROOT="${GUARD_ROOT:-$HOME/Workspaces/Misc}"
+export GUARD_CPA_DIR="${GUARD_CPA_DIR:-$GUARD_ROOT/CLIProxyAPI}"
+export GUARD_PLUGIN_DIR="${GUARD_PLUGIN_DIR:-$GUARD_ROOT/cpa-plugin-privacyfilter}"
+export GUARD_RUN_DIR="${GUARD_RUN_DIR:-$GUARD_CPA_DIR/dist/language-guard-test}"
+
+printf '测试目录：%s\n' "$GUARD_RUN_DIR"
 mkdir -p "$GUARD_RUN_DIR/auth" "$GUARD_RUN_DIR/plugins"
 cp "$GUARD_PLUGIN_DIR/dist/privacyfilter.so" \
   "$GUARD_RUN_DIR/plugins/privacyfilter.so"
 chmod 700 "$GUARD_RUN_DIR" "$GUARD_RUN_DIR/auth"
-~~~
 
-生成两个独立的随机 Key，写入本地 secrets.env；重复执行时保留已有 Key：
-
-~~~bash
 /usr/bin/python3 - <<'PY'
 import os
 import secrets
 from pathlib import Path
 
-path = Path(os.environ["GUARD_RUN_DIR"]) / "secrets.env"
+run_dir = os.environ.get("GUARD_RUN_DIR", "")
+if not run_dir.strip():
+    raise SystemExit("缺少 GUARD_RUN_DIR，请先执行本代码块开头的 export 命令")
+path = Path(run_dir) / "secrets.env"
 if path.exists():
     print("secrets.env 已存在，继续使用原有 Key")
 else:
+    if (path.parent / "config.yaml").exists():
+        raise SystemExit("已有 config.yaml 但缺少 secrets.env，请恢复原密钥文件或使用新的测试目录")
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as stream:
         stream.write(
@@ -329,6 +342,19 @@ secrets.env 保存的是原始值；需要登录管理页面时，在本机打�
 这里读取 CPA 自带的 config.example.yaml，保留默认配置结构，再设置测试所需字段。
 因此从远程刚克隆的 CPA 模板即使尚未包含 privacyfilter，也能生成正确配置。
 
+在执行本节前恢复路径并载入第 5 节生成的 Key，尤其是在新开的终端中：
+
+~~~bash
+export GUARD_ROOT="${GUARD_ROOT:-$HOME/Workspaces/Misc}"
+export GUARD_CPA_DIR="${GUARD_CPA_DIR:-$GUARD_ROOT/CLIProxyAPI}"
+export GUARD_PLUGIN_DIR="${GUARD_PLUGIN_DIR:-$GUARD_ROOT/cpa-plugin-privacyfilter}"
+export GUARD_RUN_DIR="${GUARD_RUN_DIR:-$GUARD_CPA_DIR/dist/language-guard-test}"
+printf '测试目录：%s\n' "$GUARD_RUN_DIR"
+source "$GUARD_RUN_DIR/secrets.env"
+~~~
+
+如果 secrets.env 不存在，先完成第 5 节；已有自定义目录时应继续使用同一目录。
+
 如果上游必须通过你提供的本地代理访问，先执行：
 
 ~~~bash
@@ -349,6 +375,10 @@ import os
 from pathlib import Path
 import yaml
 
+required = ("GUARD_CPA_DIR", "GUARD_RUN_DIR", "CPA_LANGUAGE_GUARD_API_KEY", "CPA_LANGUAGE_GUARD_MANAGEMENT_KEY")
+missing = [name for name in required if not os.environ.get(name, "").strip()]
+if missing:
+    raise SystemExit("缺少环境变量：" + ", ".join(missing) + "；请先执行本节开头的 export 和 source 命令")
 root = Path(os.environ["GUARD_CPA_DIR"])
 run = Path(os.environ["GUARD_RUN_DIR"])
 path = run / "config.yaml"
@@ -741,6 +771,7 @@ CPA/config.example.yaml 是模板；修改它不会自动修改正在运行的 c
 
 | 现象 | 检查项 |
 |---|---|
+| KeyError: 'GUARD_RUN_DIR' 或提示缺少该变量 | 当前终端未导出路径；完整执行第 5 节代码块，或先恢复并 export 自定义路径 |
 | Go 版本不足或 C 编译器缺失 | go version、gcc --version；CPA 使用 CGO_ENABLED=1，插件使用 make build |
 | 没有 plugin loaded 日志 | 两处 enabled、共享库是否安装到实际 plugins.dir、平台和架构是否匹配 |
 | 中文完全不拦截 | 是否加载功能分支的插件；是否连接到了另一个 CPA；是否以 > 开头或命中 skip 配置 |
