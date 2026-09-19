@@ -180,17 +180,23 @@ jobs:
 
       - name: Build FreeBSD shared library
         timeout-minutes: 45
-        uses: go-cross/cgo-actions@v1
-        env:
-          GOFLAGS: -trimpath -buildmode=c-shared
-        with:
-          dir: .
-          packages: .
-          targets: freebsd-${{ matrix.goarch }}
-          out-dir: dist/freebsd-${{ matrix.goarch }}
-          output: ${{ env.PLUGIN_ID }}.so
-          flags: -ldflags=-s -w
-          x-flags: main.pluginVersion=${{ steps.release_metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          freebsd_dir="${RUNNER_TEMP}/freebsd-14.3-amd64"
+          mkdir -p "${freebsd_dir}/sysroot" dist/freebsd-amd64
+          wget -q -O "${freebsd_dir}/base.txz" \
+            https://archive.freebsd.org/old-releases/amd64/14.3-RELEASE/base.txz
+          printf '%s  %s\n' \
+            e38b5cf756d60086a6c2f736eff19cc7685f7e2313e31d14342fc8df57200a92 \
+            "${freebsd_dir}/base.txz" | sha256sum --check --strict
+          tar -xJf "${freebsd_dir}/base.txz" -C "${freebsd_dir}/sysroot" \
+            --no-same-owner ./usr/include ./usr/lib ./lib
+          CGO_ENABLED=1 GOOS=freebsd GOARCH=amd64 \
+            CC="clang --target=x86_64-unknown-freebsd14.3 --sysroot=${freebsd_dir}/sysroot" \
+            CGO_LDFLAGS=-fuse-ld=lld \
+            go build -trimpath -buildmode=c-shared \
+              -ldflags "-s -w -X main.pluginVersion=${VERSION}" \
+              -o "dist/freebsd-amd64/${PLUGIN_ID}.so" .
 
       - name: Package plugin
         run: scripts/package-plugin.sh dist/freebsd-${{ matrix.goarch }} "${PLUGIN_ID}.so" "${ARCHIVE_NAME}"
