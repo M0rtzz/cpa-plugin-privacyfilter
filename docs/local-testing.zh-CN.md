@@ -20,6 +20,8 @@ bash
 安装目录统一为 **~/Programs/cliproxyapi**，实际配置为该目录下的 **config.yaml**。
 Go 和 C 编译器仅用于构建插件。CPA 必须使用支持动态库插件的发行包。
 
+正式部署、systemd 托管及升级回滚请阅读[部署指南](deployment.zh-CN.md)。
+
 ## 1. 先分清三种凭证
 
 | 凭证 | 如何获得 | 填在哪里 | 用途 |

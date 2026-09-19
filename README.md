@@ -14,6 +14,9 @@ rewritten nor translated.
 For installation, local key generation, CPA and Codex configuration, and testing,
 see the [complete local testing guide (Chinese)](docs/local-testing.zh-CN.md).
 
+For production deployment, systemd operation, acceptance checks, and rollback,
+see the [deployment guide (Chinese)](docs/deployment.zh-CN.md).
+
 ## Policy and explicit exemption
 
 The ratio is `Unicode Han characters / all Unicode letters`, counted by code
