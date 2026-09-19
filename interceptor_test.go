@@ -104,7 +104,7 @@ func TestLanguagePolicy(t *testing.T) {
 	if err := json.Unmarshal(resp.ResponseBody, &body); err != nil {
 		t.Fatal(err)
 	}
-	wantMessage := "本轮指令因汉字占比超过 20% 被拦截。为避免模型降智，请自行将指令翻译成英语后重新发送，并明确要求模型必须用英语回复。\n提示词示例：\nReply only in English, including all questions that require my answer and their answer options."
+	wantMessage := "本轮指令因汉字占比超过 20% 被拦截。为避免模型降智，请自行将指令翻译成英语后重新发送，并明确要求模型必须用英语回复。\n提示词示例：\nWrite all conversational replies in English, including explanations, questions that require my answer, and their answer options.\n\nWhen creating or editing files, Chinese may be used where appropriate, including documentation, code comments, text displayed in frontend pages, etc. Follow the language requirements of the task and the repository for those files."
 	if body.Error.Message != wantMessage {
 		t.Fatalf("unexpected message: %s", resp.ResponseBody)
 	}
