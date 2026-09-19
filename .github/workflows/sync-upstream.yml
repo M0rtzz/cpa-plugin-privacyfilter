@@ -1,0 +1,51 @@
+name: Sync upstream main
+
+on:
+  schedule:
+    - cron: '26 12 * * *' # 12:26 UTC, 20:26 Asia/Shanghai
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'M0rtzz/cpa-plugin-privacyfilter' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Merge upstream main
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const expectedParent = 'rheodev/cpa-plugin-privacyfilter';
+            const { data: repository } = await github.rest.repos.get({ owner, repo });
+            if (!repository.fork || repository.parent?.full_name !== expectedParent || repository.default_branch !== 'main') {
+              throw new Error('Unexpected fork parent or default branch; refusing to sync.');
+            }
+            try {
+              const { data } = await github.request('POST /repos/{owner}/{repo}/merge-upstream', {
+                owner, repo, branch: 'main'
+              });
+              core.info(JSON.stringify(data));
+              await core.summary
+                .addHeading('Upstream sync')
+                .addTable([
+                  ['Target', `${owner}/${repo}:main`],
+                  ['Upstream', `${expectedParent}:main`],
+                  ['Result', data.message || data.merge_type || 'Complete']
+                ])
+                .addRaw('No build, tests, feature-branch updates, force push, or deployment were performed.')
+                .write();
+            } catch (error) {
+              core.setFailed(`Upstream sync failed (${error.status || 'unknown status'}): ${error.message}`);
+              await core.summary.addHeading('Upstream sync failed')
+                .addRaw('Resolve merge conflicts, branch rules, or GITHUB_TOKEN permissions manually. Upstream workflow-file updates may require a dedicated token with Workflows write access. No force update was attempted.')
+                .write();
+            }
