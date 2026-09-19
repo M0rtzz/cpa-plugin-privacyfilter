@@ -11,9 +11,22 @@ CPA 使用 M0rtzz/CLIProxyAPI 的 main 分支，插件使用 feat/chinese-input-
 bash
 ~~~
 
-按顺序完成“编译 → 自动模拟 → 生成密钥与配置 → 配置真实上游 → 启动 CPA → 配置 Codex → 验收”。
+下文的源码复现路线按顺序完成“编译 → 自动模拟 → 生成密钥与配置 → 配置真实上游 → 启动 CPA → 配置 Codex → 验收”。
 自动模拟不需要真实模型凭证；连接真实模型时需要自己的可用账号或上游 API Key。
 文中的密钥均由你在本机生成，不需要复用任何聊天记录中的密钥。
+
+## CPA 安装方式选择
+
+本方案没有修改 CPA 的业务源码，**可以直接使用官方安装器安装 CPA 发行版**。
+下文编译 CPA 的步骤用于复现构建和自动模拟，是可选路线，不是使用插件的前提；插件仍需使用本功能分支构建的共享库。
+
+- 安装器默认目录为 `~/cliproxyapi`。自定义目录时使用
+  `INSTALL_DIR="$HOME/Programs/cliproxyapi"`，不要写 `INSTALL_DIR="~/Programs/cliproxyapi"`，双引号中的 `~` 不会展开。
+- 在 glibc 系统上选择支持插件的 `default` 包，`no-plugin` 包不支持加载本插件。
+- 安装器会生成客户端 Key，但当前脚本可能残留 `your-api-key-3`。
+  检查实际 `config.yaml` 的 `api-keys`，完整替换所有占位 Key，不要只修改第一项。
+- 已安装 CPA 时，在其实际 `config.yaml` 中启用 `privacyfilter`，并把 `.so` 放入配置的插件目录即可。
+  运行目录由安装器生成的服务配置决定（例如 systemd 的 `WorkingDirectory`）；相对路径应结合该目录核对，不要默认使用源码仓库目录。
 
 ## 1. 先分清三种凭证
 
@@ -646,6 +659,15 @@ PY
 若设置了 CODEX_HOME，则使用该目录。Codex 0.154.0 的 --profile 读取独立文件，
 不是基础 config.toml 中的 profiles 表。
 
+**env_key 填写环境变量名，不填写 API Key 的实际值。** 保持下面这一行不变：
+
+~~~toml
+env_key = "CPA_LANGUAGE_GUARD_API_KEY"
+~~~
+
+实际客户端 Key 保存在 secrets.env 中，由启动 Codex 的终端加载。若把 Key 值填入 env_key，
+Codex 会将整个 Key 当作环境变量名查找，进而报 Missing environment variable。
+
 以下设置是来源识别所需：
 
 ~~~toml
@@ -662,7 +684,14 @@ supports_websockets = false
 实际目标仍由 base_url 指定为本地 CPA。
 如果改成 Custom 等其他名称，英文请求也可能返回 input_attribution_unavailable。
 
-启动交互测试：
+在启动 Codex 的同一个终端加载 Key，并检查变量非空。以下检查不打印密钥：
+
+~~~bash
+source "$GUARD_RUN_DIR/secrets.env"
+test -n "$CPA_LANGUAGE_GUARD_API_KEY" && printf '%s\n' '客户端 Key 环境变量已加载'
+~~~
+
+如果检查未成功，先核对测试目录和 secrets.env；成功后启动交互测试：
 
 ~~~bash
 mkdir -p "$GUARD_RUN_DIR/codex-workspace"
@@ -771,7 +800,10 @@ CPA/config.example.yaml 是模板；修改它不会自动修改正在运行的 c
 
 | 现象 | 检查项 |
 |---|---|
+| 安装器只打印 Selected asset variant 便退出 | 检查是否遇到 GitHub 匿名 API 的 HTTP 403 限流；先用 gh auth status 确认已登录，再用 gh api repos/router-for-me/CLIProxyAPI/releases/latest 获取发行信息，无需把令牌写入命令或配置 |
 | KeyError: 'GUARD_RUN_DIR' 或提示缺少该变量 | 当前终端未导出路径；完整执行第 5 节代码块，或先恢复并 export 自定义路径 |
+| Missing environment variable | profile 的 env_key 必须是变量名 CPA_LANGUAGE_GUARD_API_KEY，不能是 Key 值；在启动 Codex 的同一终端执行 source "$GUARD_RUN_DIR/secrets.env"，再用 test -n "$CPA_LANGUAGE_GUARD_API_KEY" 检查，不打印密钥 |
+| Model metadata 或 Skill descriptions 警告 | 分别涉及模型元数据和技能说明，不是 Missing environment variable 的原因；先按上一项修复环境变量，不因此自动更换模型或禁用技能 |
 | Go 版本不足或 C 编译器缺失 | go version、gcc --version；CPA 使用 CGO_ENABLED=1，插件使用 make build |
 | 没有 plugin loaded 日志 | 两处 enabled、共享库是否安装到实际 plugins.dir、平台和架构是否匹配 |
 | 中文完全不拦截 | 是否加载功能分支的插件；是否连接到了另一个 CPA；是否以 > 开头或命中 skip 配置 |
