@@ -1,0 +1,16 @@
+# Merge this section into your existing CPA config.yaml.
+# Keep your current API keys, model routing, and upstream credentials.
+# Install plugins/privacyfilter.so (or the matching .dylib/.dll extension).
+# The layout plugins/linux/amd64/privacyfilter.so is also supported.
+plugins:
+  enabled: true
+  dir: "plugins"
+  configs:
+    privacyfilter:
+      enabled: true
+      max_han_percent: 20
+      # Exempt the whole latest instruction if it starts with > after whitespace.
+      # Reliable source metadata is still required.
+      allow_quoted_input: true
+      skip_models: []
+      skip_formats: []

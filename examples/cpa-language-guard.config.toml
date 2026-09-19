@@ -1,0 +1,20 @@
+# Independent Codex 0.154.0 profile: cpa-language-guard.config.toml.
+# After testing, place in $CODEX_HOME (normally ~/.codex) and launch with:
+#   codex --profile cpa-language-guard
+# Replace the model alias and set CPA_LANGUAGE_GUARD_API_KEY in your shell.
+# Do not put real credentials in this file or overwrite your usual config.
+model = "YOUR_CPA_MODEL_ALIAS"
+model_provider = "cpa_language_guard"
+
+[features]
+content_item_kinds = true
+
+[model_providers.cpa_language_guard]
+# This exact name preserves the source metadata in Codex 0.154.0.
+# The actual destination remains the local CPA URL below.
+name = "OpenAI"
+base_url = "http://127.0.0.1:8317/v1"
+env_key = "CPA_LANGUAGE_GUARD_API_KEY"
+wire_api = "responses"
+requires_openai_auth = false
+supports_websockets = false

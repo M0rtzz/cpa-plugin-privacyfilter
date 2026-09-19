@@ -1,5 +1,5 @@
 PLUGIN_NAME ?= privacyfilter
-VERSION ?= 0.2.0
+VERSION ?= 0.3.0
 BUILD_DIR ?= .
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
@@ -12,9 +12,8 @@ EXT_windows = dll
 PLUGIN_EXT = $(or $(EXT_$(GOOS)),so)
 PLUGIN_OUTPUT ?= $(BUILD_DIR)/$(PLUGIN_NAME).$(PLUGIN_EXT)
 PLUGIN_HEADER = $(basename $(PLUGIN_OUTPUT)).h
-GITLEAKS_RULES_URL ?= https://raw.githubusercontent.com/gitleaks/gitleaks/master/config/gitleaks.toml
 
-.PHONY: build clean update-rules
+.PHONY: build clean
 
 build:
 	mkdir -p $(BUILD_DIR)
@@ -26,6 +25,3 @@ clean:
 	rm -f $(BUILD_DIR)/$(PLUGIN_NAME).dylib
 	rm -f $(BUILD_DIR)/$(PLUGIN_NAME).dll
 	rm -f $(PLUGIN_HEADER)
-
-update-rules:
-	curl -fsSL $(GITLEAKS_RULES_URL) -o rules/gitleaks.toml

@@ -78,9 +78,14 @@ type abiError struct {
 }
 
 type abiLifecycleRequest struct {
-	ConfigYAML []byte `json:"config_yaml"`
-	PluginDir  string `json:"plugin_dir,omitempty"`
+	ConfigYAML    []byte `json:"config_yaml"`
+	PluginDir     string `json:"plugin_dir,omitempty"`
+	SchemaVersion uint32 `json:"schema_version"`
 }
+
+// Schema 2 introduced active request termination. Older hosts must not load
+// a policy plugin that they would silently fail to enforce.
+const requiredSchemaVersion uint32 = 2
 
 type abiRequestInterceptRequest struct {
 	pluginapi.RequestInterceptRequest
@@ -109,7 +114,7 @@ func inferPluginDir() string {
 
 //export cliproxy_plugin_init
 func cliproxy_plugin_init(host *C.cliproxy_host_api, plugin *C.cliproxy_plugin_api) C.int {
-	if host == nil || plugin == nil {
+	if host == nil || plugin == nil || uint32(host.abi_version) != pluginabi.ABIVersion {
 		return 1
 	}
 	privacyFilterABIState.Lock()
@@ -205,6 +210,9 @@ func handlePrivacyFilterRegister(request []byte) ([]byte, error) {
 	if errDecode := json.Unmarshal(request, &req); errDecode != nil {
 		return nil, errDecode
 	}
+	if req.SchemaVersion < requiredSchemaVersion {
+		return nil, fmt.Errorf("privacyfilter language guard requires host schema >= %d (active request termination), got %d", requiredSchemaVersion, req.SchemaVersion)
+	}
 	plugin, errBuild := buildPlugin(req.ConfigYAML, req.PluginDir)
 	if errBuild != nil {
 		return nil, errBuild
@@ -218,7 +226,7 @@ func handlePrivacyFilterRegister(request []byte) ([]byte, error) {
 	privacyFilterABIState.shuttingDown = false
 	privacyFilterABIState.Unlock()
 	return abiOKEnvelope(abiRegistration{
-		SchemaVersion: pluginabi.SchemaVersion,
+		SchemaVersion: requiredSchemaVersion,
 		Metadata:      plugin.Metadata,
 		Capabilities: abiCapabilities{
 			RequestInterceptor: plugin.Capabilities.RequestInterceptor != nil,

@@ -8,8 +8,8 @@ repo_root="${GITHUB_WORKSPACE:-$(pwd)}"
 
 rm -f go-cross-bin.h "${lib_dir}/${PLUGIN_ID}.h"
 
-# The gitleaks rules are embedded into the shared library, so the archive ships
-# only the dynamic library. The CLIProxyAPI store installer extracts just the
+# The language guard has no sidecar rules, so the archive ships only the
+# dynamic library. The CLIProxyAPI store installer extracts just the
 # library and discards any other entries, so a single-file zip keeps the layout
 # clean and matches the installer's expectations.
 

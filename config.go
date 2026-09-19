@@ -1,12 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
+	"io"
 	"strings"
-
-	"privacyfilter/filter"
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
@@ -16,89 +14,91 @@ const privacyFilterProvider = "privacyfilter"
 const pluginName = "privacyfilter"
 
 type privacyFilterConfig struct {
-	GitleaksTOML string   `yaml:"gitleaks_toml"`
-	SkipModels   []string `yaml:"skip_models"`
-	SkipFormats  []string `yaml:"skip_formats"`
+	// The host passes these fields through but owns their behavior.
+	Enabled          *bool      `yaml:"enabled"`
+	Priority         int        `yaml:"priority"`
+	MaxHanPercent    percentage `yaml:"max_han_percent"`
+	AllowQuotedInput bool       `yaml:"allow_quoted_input"`
+	SkipModels       []string   `yaml:"skip_models"`
+	SkipFormats      []string   `yaml:"skip_formats"`
+	// Retained only to report migration from the original privacy filter.
+	GitleaksTOML *string `yaml:"gitleaks_toml"`
+}
+
+type percentage int
+
+func (p *percentage) UnmarshalYAML(node *yaml.Node) error {
+	if node.Tag != "!!int" {
+		return fmt.Errorf("max_han_percent must be an integer from 0 to 100")
+	}
+	var value int
+	if err := node.Decode(&value); err != nil {
+		return err
+	}
+	*p = percentage(value)
+	return nil
 }
 
 func defaultConfig() privacyFilterConfig {
-	return privacyFilterConfig{}
+	return privacyFilterConfig{MaxHanPercent: 20, AllowQuotedInput: true}
 }
 
 func parseConfig(raw []byte) (privacyFilterConfig, error) {
 	cfg := defaultConfig()
-	if len(strings.TrimSpace(string(raw))) > 0 {
-		if err := yaml.Unmarshal(raw, &cfg); err != nil {
+	if len(bytes.TrimSpace(raw)) > 0 {
+		// yaml.v3 skips custom unmarshaling for null. Inspect explicit policy
+		// values first so null cannot silently retain a permissive default.
+		var document yaml.Node
+		if err := yaml.Unmarshal(raw, &document); err != nil {
 			return cfg, fmt.Errorf("invalid privacyfilter config: %w", err)
 		}
+		if len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
+			return cfg, fmt.Errorf("invalid privacyfilter config: expected a mapping")
+		}
+		mapping := document.Content[0]
+		for i := 0; i+1 < len(mapping.Content); i += 2 {
+			key, value := mapping.Content[i].Value, mapping.Content[i+1]
+			if key == "max_han_percent" && value.Tag != "!!int" {
+				return cfg, fmt.Errorf("max_han_percent must be an integer from 0 to 100")
+			}
+			if key == "allow_quoted_input" && value.Tag != "!!bool" {
+				return cfg, fmt.Errorf("allow_quoted_input must be a boolean")
+			}
+			if key == "<<" {
+				return cfg, fmt.Errorf("invalid privacyfilter config: YAML merge keys are not supported")
+			}
+		}
+		decoder := yaml.NewDecoder(bytes.NewReader(raw))
+		decoder.KnownFields(true)
+		if err := decoder.Decode(&cfg); err != nil {
+			return cfg, fmt.Errorf("invalid privacyfilter config: %w", err)
+		}
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF {
+			return cfg, fmt.Errorf("invalid privacyfilter config: expected one YAML document")
+		}
+	}
+	if cfg.MaxHanPercent < 0 || cfg.MaxHanPercent > 100 {
+		return cfg, fmt.Errorf("max_han_percent must be an integer from 0 to 100")
+	}
+	if cfg.GitleaksTOML != nil {
+		log.Warn("privacyfilter: gitleaks_toml is obsolete; this branch checks language and does not redact private information")
 	}
 	return cfg, nil
-}
-
-// resolveGitleaksPath resolves the configured gitleaks rule file. The return is
-// split into a path (may be empty) and an embedded flag: when the path is empty
-// and embedded is true, the caller should load the rules baked into the binary.
-func (cfg *privacyFilterConfig) resolveGitleaksPath(pluginDir string) (path string, embedded bool) {
-	if cfg.GitleaksTOML == "" {
-		builtin := filepath.Join(pluginDir, "rules", "gitleaks.toml")
-		if _, err := os.Stat(builtin); err == nil {
-			return builtin, false
-		}
-		// No sidecar file: fall back to the rules compiled into the binary.
-		return "", true
-	}
-	if filepath.IsAbs(cfg.GitleaksTOML) {
-		return cfg.GitleaksTOML, false
-	}
-	return filepath.Join(pluginDir, cfg.GitleaksTOML), false
 }
 
 func (cfg *privacyFilterConfig) shouldSkip(model, requestedModel, format string) bool {
 	for _, m := range cfg.SkipModels {
 		trimmed := strings.TrimSpace(m)
-		if strings.EqualFold(trimmed, model) || strings.EqualFold(trimmed, requestedModel) {
+		if trimmed != "" && (strings.EqualFold(trimmed, model) || strings.EqualFold(trimmed, requestedModel)) {
 			return true
 		}
 	}
 	for _, f := range cfg.SkipFormats {
-		if strings.EqualFold(strings.TrimSpace(f), format) {
+		trimmed := strings.TrimSpace(f)
+		if trimmed != "" && strings.EqualFold(trimmed, format) {
 			return true
 		}
 	}
 	return false
-}
-
-func newFilter(pluginDir string, cfg privacyFilterConfig) (*filter.Filter, error) {
-	tomlPath, embedded := cfg.resolveGitleaksPath(pluginDir)
-
-	// The filter loads its rules from a file path. When no sidecar file is
-	// present (the common case for store installs), materialize the embedded
-	// rules into a temporary file. Compiled rules live in memory, so the temp
-	// file is removed right after the filter is constructed.
-	if embedded {
-		tmp, errTmp := os.CreateTemp("", "privacyfilter-gitleaks-*.toml")
-		if errTmp != nil {
-			return nil, fmt.Errorf("create temp rules file: %w", errTmp)
-		}
-		tmpPath := tmp.Name()
-		if _, errWrite := tmp.Write(embeddedGitleaks); errWrite != nil {
-			tmp.Close()
-			os.Remove(tmpPath)
-			return nil, fmt.Errorf("write temp rules file: %w", errWrite)
-		}
-		if errClose := tmp.Close(); errClose != nil {
-			os.Remove(tmpPath)
-			return nil, fmt.Errorf("close temp rules file: %w", errClose)
-		}
-		defer func() { _ = os.Remove(tmpPath) }()
-		tomlPath = tmpPath
-	}
-
-	f, err := filter.New(tomlPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create privacy filter: %w", err)
-	}
-	rules, skipped := f.Stats()
-	log.Infof("privacy filter loaded: %d rules, %d skipped", rules, skipped)
-	return f, nil
 }
