@@ -40,7 +40,7 @@ func (p *privacyFilterPlugin) interceptRequest(req pluginapi.RequestInterceptReq
 	}
 	counts := countLetters(text)
 	if counts.Han*100 > counts.Total*int64(p.cfg.MaxHanPercent) {
-		message := fmt.Sprintf("本轮指令的汉字占比超过 %d%%，请翻译成英语后重新发送，并明确要求模型必须用英语回复。\n提示词示例：\nReply only in English, including all questions that require my answer and their answer options.", p.cfg.MaxHanPercent)
+		message := fmt.Sprintf("为避免模型降智：本轮指令的汉字占比超过 %d%%，请翻译成英语后重新发送，并明确要求模型必须用英语回复。\n提示词示例：\nReply only in English, including all questions that require my answer and their answer options.", p.cfg.MaxHanPercent)
 		return rejectRequest("chinese_ratio_exceeded", message), nil
 	}
 	return pluginapi.RequestInterceptResponse{}, nil
