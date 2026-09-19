@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
-NOTICE = "本轮指令的汉字占比超过 20%，请翻译成英语后重新发送。可以用英语要求模型用中文回复。\nPlease reply in Chinese, but write all questions that require my answer and their answer options in English."
+NOTICE = "本轮指令的汉字占比超过 20%，请翻译成英语后重新发送。可以要求模型用英语回复。"
 OPENER = build_opener(ProxyHandler({}))
 
 
