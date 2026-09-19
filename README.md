@@ -11,6 +11,9 @@ The plugin ID and library name remain `privacyfilter`. **This branch no longer
 detects secrets or redacts private information.** Allowed input is neither
 rewritten nor translated.
 
+For installation, local key generation, CPA and Codex configuration, and testing,
+see the [complete local testing guide (Chinese)](docs/local-testing.zh-CN.md).
+
 ## Policy and explicit exemption
 
 The ratio is `Unicode Han characters / all Unicode letters`, counted by code

@@ -149,6 +149,9 @@ Codex 0.154.0 将这一独立文件叠加到用户基础配置上，不使用 `[
 
 ## 测试与本地模拟
 
+首次搭建请阅读[从零开始的本地测试指南](docs/local-testing.zh-CN.md)，包含依赖安装、密钥生成、
+完整配置生成、上游 OAuth / API Key 接入、Codex 配置和问题排查。
+
 ```bash
 go test ./...
 go vet ./...
