@@ -83,7 +83,7 @@ before an upstream request or SSE output begins:
   "error": {
     "type": "invalid_request_error",
     "code": "chinese_ratio_exceeded",
-    "message": "为避免模型降智：本轮指令的汉字占比超过 20%，请翻译成英语后重新发送，并明确要求模型必须用英语回复。\n提示词示例：\nReply only in English, including all questions that require my answer and their answer options."
+    "message": "本轮指令因汉字占比超过 20% 被拦截。为避免模型降智，请自行将指令翻译成英语后重新发送，并明确要求模型必须用英语回复。\n提示词示例：\nReply only in English, including all questions that require my answer and their answer options."
   }
 }
 ```
